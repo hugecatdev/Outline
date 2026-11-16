@@ -3,6 +3,7 @@ package com.wavecat.outline.api
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.os.bundleOf
+import com.wavecat.outline.api.locks.AccessibilityButtonLock
 import com.wavecat.outline.api.locks.NodeLock
 import com.wavecat.outline.api.locks.Query
 import com.wavecat.outline.api.locks.filter.EventTypeLock
@@ -39,9 +40,8 @@ private fun buildNodeQuery(table: LuaValue) = Query(
 )
 
 fun Globals.installAccessibilityEventLib() {
-    for (i in AccessibilityEvent::class.java.declaredFields)
-        if (i.name.startsWith("TYPE_"))
-            set(i.name.substring(5), i.getInt(null))
+    for ((name, value) in LuaConstants.eventTypes.constants)
+        set(name, value)
 
     set("Node", twoArgFunction { arg, fromRoot ->
         CoerceJavaToLua.coerce(NodeLock(buildNodeQuery(arg), fromRoot.optboolean(false)))
@@ -85,6 +85,10 @@ fun Globals.installAccessibilityEventLib() {
 
     set("EventType", oneArgFunction { arg ->
         CoerceJavaToLua.coerce(EventTypeLock(arg.checkint()))
+    })
+
+    set("AccessibilityButton", zeroArgFunction {
+        CoerceJavaToLua.coerce(AccessibilityButtonLock())
     })
 
     set("WindowContentChanged", eventTypeFunction(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED))

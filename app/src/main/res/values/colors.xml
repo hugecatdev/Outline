@@ -1,2 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources />
+<resources>
+    <color name="code_keyword">#AF00DB</color>
+    <color name="code_string">#A31515</color>
+    <color name="code_number">#098658</color>
+    <color name="code_comment">#008000</color>
+    <color name="code_function">#795E26</color>
+    <color name="code_constant">#0070C1</color>
+    <color name="code_module">#267F99</color>
+    <color name="code_gutter">#9E9E9E</color>
+</resources>

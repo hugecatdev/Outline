@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-sdk tools:overrideLibrary="com.google.mlkit.genai.prompt, com.google.mlkit.genai.common, com.google.android.gms.common" />
+
     <uses-feature android:name="android.hardware.fingerprint" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -26,9 +28,15 @@
         android:theme="@style/Theme.Outline"
         tools:targetApi="31">
 
+        <provider
+            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+            android:authorities="${applicationId}.mlkitinitprovider"
+            tools:node="remove" />
+
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -75,6 +83,22 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/window_content_service" />
+        </service>
+
+        <service
+            android:name=".services.AccessibilityButtonService"
+            android:enabled="@bool/accessibility_button_supported"
+            android:exported="true"
+            android:label="@string/accessibility_button_service"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_button_service" />
         </service>
 
         <receiver

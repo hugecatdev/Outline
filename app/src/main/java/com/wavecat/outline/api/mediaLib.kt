@@ -1,13 +1,33 @@
 package com.wavecat.outline.api
 
 import android.content.Context
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.Build
 import android.view.KeyEvent
 import com.wavecat.outline.utils.twoArgFunction
 import com.wavecat.outline.utils.zeroArgFunction
 import org.luaj.vm2.Globals
 import org.luaj.vm2.LuaValue
 import org.luaj.vm2.LuaValue.NIL
+
+private val headphoneTypes = buildSet {
+    add(AudioDeviceInfo.TYPE_WIRED_HEADSET)
+    add(AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
+    add(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+    add(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
+    add(AudioDeviceInfo.TYPE_USB_HEADSET)
+    add(AudioDeviceInfo.TYPE_HEARING_AID)
+    add(AudioDeviceInfo.TYPE_BLE_HEADSET)
+}
+
+private fun AudioManager.isHeadphonesConnected(): Boolean =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in headphoneTypes }
+    } else {
+        @Suppress("DEPRECATION")
+        isWiredHeadsetOn || isBluetoothA2dpOn
+    }
 
 fun Globals.installMediaLib(context: Context) {
     set("mediaKeyEvent", twoArgFunction { arg1, arg2 ->
@@ -54,6 +74,11 @@ fun Globals.installMediaLib(context: Context) {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
         NIL
+    })
+
+    set("isHeadphonesConnected", zeroArgFunction {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        LuaValue.valueOf(audioManager.isHeadphonesConnected())
     })
 
     set("isMusicActive", zeroArgFunction {

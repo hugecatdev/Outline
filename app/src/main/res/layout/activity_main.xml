@@ -1,42 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/save"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="32dp"
-        android:layout_marginBottom="32dp"
-        android:layout_weight="1"
-        android:clickable="true"
-        android:contentDescription="@null"
-        android:focusable="true"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="@+id/textInputLayout"
-        app:srcCompat="@drawable/ic_baseline_save_24" />
-
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/textInputLayout"
-        android:layout_width="0dp"
+    <FrameLayout
+        android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@null"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        android:layout_weight="1">
 
-        <com.google.android.material.textfield.TextInputEditText
+        <com.wavecat.outline.editor.CodeEditText
             android:id="@+id/script"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:gravity="top"
-            android:hint="@null" />
+            android:importantForAutofill="no"
+            android:textSize="14sp"
+            tools:ignore="LabelFor" />
 
-    </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/save"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:contentDescription="@null"
+            app:srcCompat="@drawable/ic_baseline_save_24" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    </FrameLayout>
+
+    <com.wavecat.outline.editor.CompletionBar
+        android:id="@+id/hints"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+</LinearLayout>

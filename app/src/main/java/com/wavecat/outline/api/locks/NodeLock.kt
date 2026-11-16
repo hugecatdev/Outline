@@ -32,9 +32,6 @@ fun AccessibilityNodeInfo.findNode(query: Query): AccessibilityNodeInfo? {
                 return result
         }
 
-        if (node.text != null)
-        println(node.text)
-
         if (!node.matchesQuery(query))
             return@repeat
 
@@ -62,9 +59,12 @@ fun AccessibilityNodeInfo.matchesQuery(query: Query): Boolean {
 }
 
 class NodeLock(private val query: Query, private val fromRoot: Boolean = false) : Lock() {
-    override fun tryUnlock(accessibilityEvent: AccessibilityEvent): Boolean {
+    override fun tryUnlock(event: Any): Boolean? {
+        if (event !is AccessibilityEvent)
+            return null
+
         if (fromRoot) {
-            var root: AccessibilityNodeInfo? = accessibilityEvent.source
+            var root: AccessibilityNodeInfo? = event.source
 
             while (root?.parent != null)
                 root = root.parent
@@ -72,7 +72,7 @@ class NodeLock(private val query: Query, private val fromRoot: Boolean = false) 
             return root?.findNode(query) != null
         }
 
-        return accessibilityEvent.source?.findNode(query) != null
+        return event.source?.findNode(query) != null
     }
 }
 

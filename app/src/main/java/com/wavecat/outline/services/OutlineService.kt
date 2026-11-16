@@ -4,18 +4,20 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
 import android.os.Build
-import android.speech.tts.TextToSpeech
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import androidx.preference.PreferenceManager
 import com.wavecat.outline.api.Script
+import com.wavecat.outline.api.Speech
 import com.wavecat.outline.api.installAccessibilityEventLib
 import com.wavecat.outline.api.installAutomationLib
 import com.wavecat.outline.api.installKeyEventLib
 import com.wavecat.outline.api.installMediaLib
 import com.wavecat.outline.api.installUtilsLib
+import com.wavecat.outline.api.KeyConsumption
+import com.wavecat.outline.api.LuaConstants
 import com.wavecat.outline.api.locks.utils.AllLock
 import com.wavecat.outline.api.locks.utils.Lock
 import com.wavecat.outline.utils.CustomDebugLib
@@ -41,29 +43,22 @@ class OutlineService : AccessibilityService() {
     private val preferences by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
 
     private val debugLib = CustomDebugLib()
-    private var scriptContext: Script? = null
+    private val scriptContext: Script?
+        get() = scripts.find { it.isRunning }
 
-    private val tts: TextToSpeech by lazy {
-        TextToSpeech(applicationContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts.language = java.util.Locale.getDefault()
-            }
-        }
-    }
+    private lateinit var speech: Speech
 
     private val globals: Globals by lazy {
         JsePlatform.standardGlobals().apply {
-            for (i in AccessibilityService::class.java.declaredFields)
-                if (i.name.startsWith("GLOBAL_ACTION_"))
-                    set(i.name.substring(14), i.getInt(null))
+            for ((name, value) in LuaConstants.globalActions.constants)
+                set(name, value)
 
             set("service", CoerceJavaToLua.coerce(this))
 
             set("delay", oneArgFunction { arg ->
-                if (scriptContext == null)
-                    throw LuaError("scriptContext == null")
+                val context = scriptContext ?: throw LuaError("scriptContext == null")
 
-                scriptContext?.delay(arg.checklong())
+                context.delay(arg.checklong())
                 NIL
             })
 
@@ -104,11 +99,10 @@ class OutlineService : AccessibilityService() {
             })
 
             set("findRoot", oneArgFunction { event ->
-                if (scriptContext == null)
-                    throw LuaError("scriptContext == null")
+                val context = scriptContext ?: throw LuaError("scriptContext == null")
 
                 var root: AccessibilityNodeInfo? =
-                    (if (event.isnil()) scriptContext?.latestAccessibilityEvent else
+                    (if (event.isnil()) context.latestAccessibilityEvent else
                         event.checkuserdata() as AccessibilityEvent)?.source
 
                 while (root?.parent != null)
@@ -152,12 +146,16 @@ class OutlineService : AccessibilityService() {
             })
 
             set("speak", twoArgFunction { text, queueMode ->
-                val mode = when (queueMode.optjstring("add")) {
-                    "flush" -> TextToSpeech.QUEUE_FLUSH
-                    else -> TextToSpeech.QUEUE_ADD
-                }
+                speech.speak(text.checkjstring(), flush = queueMode.optjstring("add") == "flush")
+                NIL
+            })
 
-                tts.speak(text.checkjstring(), mode, null, null)
+            set("speakAndWait", twoArgFunction { text, queueMode ->
+                val context = scriptContext ?: throw LuaError("scriptContext == null")
+                val phrase = text.checkjstring()
+                val flush = queueMode.optjstring("add") == "flush"
+
+                context.await { wake -> speech.speak(phrase, flush, wake) }
                 NIL
             })
 
@@ -166,6 +164,18 @@ class OutlineService : AccessibilityService() {
     }
 
     private val scripts = mutableListOf<Script>()
+
+    private val keyConsumption = KeyConsumption()
+
+    override fun onCreate() {
+        super.onCreate()
+        speech = Speech(this)
+    }
+
+    override fun onDestroy() {
+        speech.shutdown()
+        super.onDestroy()
+    }
 
     override fun onServiceConnected() {
         instance = this
@@ -186,29 +196,23 @@ class OutlineService : AccessibilityService() {
             loadScripts()
     }
 
-    fun loadScripts() = runCatching {
+    fun loadScripts() {
         interruptScripts()
 
-        val code = preferences.getString("script", "")
+        val code = preferences.getString("script", "").orEmpty()
 
-        code!!
+        code
             .split("-----\n")
             .forEachIndexed { index, script ->
-                runScript(globals.load(script, "#$index"))
+                runCatching { runScript(globals.load(script, "#$index")) }
+                    .onFailure(::notifyError)
             }
     }
-        .onFailure {
-            notifyError(it)
-        }
 
     private fun interruptScripts() = debugLib.apply {
         interrupted = true
 
-        scripts.forEach {
-            it.recycle()
-            it.resumeCoroutine(false)
-        }
-
+        scripts.toList().forEach { it.interrupt() }
         scripts.clear()
 
         interrupted = false
@@ -219,13 +223,23 @@ class OutlineService : AccessibilityService() {
             name = name.ifEmpty { "#${scripts.size}" },
             globals = globals,
             coroutine = globals.coroutineCreate(function),
-            onResume = { scriptContext = it },
-            onRecycle = { scripts.remove(it) }
+            onRecycle = { scripts.remove(it) },
+            onError = ::notifyError,
         )
             .apply {
-                resume()
                 scripts.add(this)
+                resume()
             }
+
+    private inline fun dispatch(block: (Script) -> Unit) {
+        for (script in scripts.toList()) {
+            if (script.isRecycled)
+                continue
+
+            runCatching { block(script) }
+                .onFailure(::notifyError)
+        }
+    }
 
     private fun notifyError(e: Throwable) {
         Toast.makeText(this, e.toString(), Toast.LENGTH_SHORT).show()
@@ -235,37 +249,28 @@ class OutlineService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
-        runCatching {
-            scripts.forEach {
-                it.onAccessibilityEvent(event)
-            }
-        }
-            .onFailure {
-                notifyError(it)
-            }
+        dispatchEvent(event)
     }
+
+    fun dispatchEvent(event: Any) = dispatch { it.onEvent(event) }
 
     override fun onInterrupt() {
         instance = null
         interruptScripts()
+        keyConsumption.clear()
     }
 
     override fun onKeyEvent(event: KeyEvent?): Boolean {
-        var ignore = false
+        if (event == null) return false
 
-        if (event != null) {
-            runCatching {
-                scripts.forEach {
-                    if (it.onKeyEvent(event))
-                        ignore = true
-                }
-            }
-                .onFailure {
-                    notifyError(it)
-                }
+        var requested = false
+
+        dispatch {
+            if (it.onEvent(event))
+                requested = true
         }
 
-        return ignore
+        return keyConsumption.decide(event.keyCode, event.action, event.repeatCount, requested)
     }
 
     companion object {

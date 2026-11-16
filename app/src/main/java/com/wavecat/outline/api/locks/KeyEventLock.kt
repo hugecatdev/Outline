@@ -7,6 +7,7 @@ class KeyEventLock(
     private val nextKeyCode: Int?,
     private val nextAction: Int?,
 ) : Lock() {
-    override fun tryUnlock(event: KeyEvent): Boolean =
-        (nextAction == null || event.action == nextAction) && (nextKeyCode == null || event.keyCode == nextKeyCode)
+    override fun tryUnlock(event: Any): Boolean? =
+        if (event !is KeyEvent) null
+        else (nextAction == null || event.action == nextAction) && (nextKeyCode == null || event.keyCode == nextKeyCode)
 }

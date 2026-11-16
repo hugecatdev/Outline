@@ -36,9 +36,8 @@ private fun keyClickFunction(count: Int) =
     }
 
 fun Globals.installKeyEventLib() {
-    for (i in KeyEvent::class.java.declaredFields)
-        if (i.name.startsWith("KEYCODE_"))
-            set(i.name.substring(8), i.getInt(null))
+    for ((name, value) in LuaConstants.keyCodes.constants)
+        set(name, value)
 
     set("SingleClick", twoArgFunction { keyCodeArg, intervalArg ->
         val keyCode = keyCodeArg.checkint()

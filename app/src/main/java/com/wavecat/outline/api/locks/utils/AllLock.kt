@@ -1,14 +1,31 @@
 package com.wavecat.outline.api.locks.utils
 
-import android.view.KeyEvent
-import android.view.accessibility.AccessibilityEvent
-
 class AllLock(
     private val locks: List<Lock>,
 ) : Lock() {
-    override fun tryUnlock(event: KeyEvent): Boolean =
-        locks.all { it.tryUnlock(event) == true }
+    override fun tryUnlock(event: Any): Boolean? {
+        var pending = false
 
-    override fun tryUnlock(accessibilityEvent: AccessibilityEvent): Boolean =
-        locks.all { it.tryUnlock(accessibilityEvent) == true }
+        for (lock in locks) {
+            when (lock.tryUnlock(event)) {
+                false -> {
+                    reset()
+                    return false
+                }
+
+                null -> pending = true
+                true -> {}
+            }
+        }
+
+        if (pending)
+            return null
+
+        reset()
+        return true
+    }
+
+    override fun reset() {
+        locks.forEach { it.reset() }
+    }
 }

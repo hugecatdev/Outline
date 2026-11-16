@@ -1,56 +1,58 @@
 package com.wavecat.outline.api.locks.utils
 
+import android.os.SystemClock
 import android.util.Log
-import android.view.KeyEvent
-import android.view.accessibility.AccessibilityEvent
 
 class StepsLock(
     private val locks: List<Lock>,
     private val interval: Long
 ) : Lock() {
-    private var latestTime = System.currentTimeMillis()
-
-    private var waitingFor = locks[0]
-
-    private inline fun tryUnlockForType(block: (Lock) -> Boolean?): Boolean? {
-        val currentTime = System.currentTimeMillis()
-
-        if ((currentTime - latestTime) > interval) {
-            Log.i(TAG, "$this time reset")
-            waitingFor = locks[0]
-        }
-
-        latestTime = currentTime
-
-        val status = block(waitingFor)
-
-        if (status == true) {
-            val index = locks.indexOf(waitingFor)
-
-            if (index == locks.size - 1) {
-                Log.i(TAG, "$this unlock")
-                waitingFor = locks[0]
-                return true
-            }
-
-            waitingFor = locks[index + 1]
-            Log.i(TAG, "$this waiting for the next step")
-            return null
-        }
-
-        if (status == false) {
-            Log.i(TAG, "$this chain reset")
-            waitingFor = locks[0]
-        }
-
-        return status
+    init {
+        require(locks.isNotEmpty()) { "Steps requires at least one lock" }
     }
 
-    override fun tryUnlock(event: KeyEvent): Boolean? =
-        tryUnlockForType { it.tryUnlock(event) }
+    private var index = 0
 
-    override fun tryUnlock(accessibilityEvent: AccessibilityEvent): Boolean? =
-        tryUnlockForType { it.tryUnlock(accessibilityEvent) }
+    private var stepTime = 0L
+
+    override fun tryUnlock(event: Any): Boolean? {
+        val currentTime = SystemClock.uptimeMillis()
+
+        if (index > 0 && currentTime - stepTime > interval) {
+            Log.i(TAG, "$this time reset")
+            reset()
+        }
+
+        return when (locks[index].tryUnlock(event)) {
+            true -> {
+                if (index == locks.lastIndex) {
+                    Log.i(TAG, "$this unlock")
+                    reset()
+                    true
+                } else {
+                    index++
+                    stepTime = currentTime
+                    Log.i(TAG, "$this waiting for step $index")
+                    null
+                }
+            }
+
+            false -> {
+                if (index > 0)
+                    Log.i(TAG, "$this chain reset")
+
+                reset()
+                false
+            }
+
+            null -> null
+        }
+    }
+
+    override fun reset() {
+        index = 0
+        locks.forEach { it.reset() }
+    }
 
     companion object {
         const val TAG = "StepsLock"

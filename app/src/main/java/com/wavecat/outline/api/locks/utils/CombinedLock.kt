@@ -1,30 +1,39 @@
 package com.wavecat.outline.api.locks.utils
 
-import android.view.KeyEvent
-import android.view.accessibility.AccessibilityEvent
-import java.util.concurrent.ConcurrentHashMap
+import android.os.SystemClock
 
 class CombinedLock(
     private val locks: List<Lock>,
     private val interval: Long
 ) : Lock() {
-    private val eventTimes = ConcurrentHashMap<Lock, Long>().apply {
-        locks.forEach { put(it, System.currentTimeMillis() - interval) }
+    init {
+        require(locks.isNotEmpty()) { "Combined requires at least one lock" }
     }
 
-    private inline fun tryUnlockForType(block: (Lock) -> Boolean?): Boolean {
-        val currentTime = System.currentTimeMillis()
+    private val eventTimes = LongArray(locks.size) { NEVER }
 
-        for (lock in locks) {
-            if (block(lock) == true)
-                eventTimes[lock] = currentTime
+    override fun tryUnlock(event: Any): Boolean? {
+        val currentTime = SystemClock.uptimeMillis()
+
+        locks.forEachIndexed { index, lock ->
+            if (lock.tryUnlock(event) == true)
+                eventTimes[index] = currentTime
         }
 
-        return eventTimes.values.all { (currentTime - it) < interval }
+        if (eventTimes.all { it != NEVER && currentTime - it < interval }) {
+            reset()
+            return true
+        }
+
+        return null
     }
 
-    override fun tryUnlock(event: KeyEvent): Boolean = tryUnlockForType { it.tryUnlock(event) }
+    override fun reset() {
+        eventTimes.fill(NEVER)
+        locks.forEach { it.reset() }
+    }
 
-    override fun tryUnlock(accessibilityEvent: AccessibilityEvent): Boolean =
-        tryUnlockForType { it.tryUnlock(accessibilityEvent) }
+    private companion object {
+        const val NEVER = Long.MIN_VALUE
+    }
 }
